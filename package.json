@@ -1,0 +1,22 @@
+{
+  "name": "grammarbot",
+  "version": "1.0.0",
+  "description": "Discord grammar bot",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Akameki/GrammarBot.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Akameki/GrammarBot/issues"
+  },
+  "homepage": "https://github.com/Akameki/GrammarBot#readme",
+  "dependencies": {
+    "discord.js": "^12.5.1"
+  }
+}
