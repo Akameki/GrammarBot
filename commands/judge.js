@@ -86,23 +86,23 @@ module.exports = {
 
         const actualNumOfMessages = Math.min(messagesToJudge.length, limit)
 
-        let textToSend = `*Most recent ${limit} messages to judge for ${targetMember}:*\n`;
-        if (messagesToJudge.length) {
-            for (let i = actualNumOfMessages - 1; i >= 0; i--) {
-                message = messagesToJudge[i];
-                textToSend += `\`${i + 1}. ${message.createdAt.toDateString()}:\` ${message.cleanContent} \n`;
-            }
-            channel.send(textToSend);
-        } else {
-            channel.send("No messages to judge.");
-        }
+        // let textToSend = `*Most recent ${limit} messages to judge for ${targetMember}:*\n`;
+        // if (messagesToJudge.length) {
+        //     for (let i = actualNumOfMessages - 1; i >= 0; i--) {
+        //         message = messagesToJudge[i];
+        //         textToSend += `\`${i + 1}. ${message.createdAt.toDateString()}:\` ${message.cleanContent} \n`;
+        //     }
+        //     channel.send(textToSend);
+        // } else {
+        //     channel.send("No messages to judge.");
+        // }
 
         channel.stopTyping();
         let embeds = [];
         for (let i = 0; i < actualNumOfMessages; i++) {
             let message = messagesToJudge[i];
             const messageEmbed = new Discord.MessageEmbed()
-                .setColor('#006080')
+                .setColor('#aaaaaa')
                 .setDescription(message.cleanContent)
                 //.setTitle(`Judgement of `)
                 .setAuthor(`The Case of ${targetMember.nickname}`, targetMember.user.avatarURL())
@@ -122,10 +122,48 @@ module.exports = {
         }
 
         let lastMessage;
-        for (let i = 0; i < actualNumOfMessages; i++) {
-            await channel.send(embeds[i]).then((msg) => lastMessage = msg).catch(console.error);
-            await lastMessage.delete({ timeout: 3500 }).catch(console.error);
-        }
+        embedMessage = await channel.send(embeds[0]).catch(console.error);
         
+        try {
+            await embedMessage.react("❌");
+            await embedMessage.react("✅");
+            await embedMessage.react("⏭️");
+        } catch (error) {
+            console.error(error);
+            channel.send(error.message).catch(console.error);
+        }
+
+        const filter = (reaction, user) => ["❌", "✅", "⏭️"].includes(reaction.emoji.name) && msg.author.id === user.id;
+        const collector = embedMessage.createReactionCollector(filter, { time: 600000 }); // 10 minutes
+        let currentMessage = 0;
+        let incorrect = 0;
+        let correct = 0;
+
+        collector.on("collect", async (reaction, user)  => {
+            try {
+                if (reaction.emoji.name === "❌") {
+                    incorrect++;
+                } else if (reaction.emoji.name === "✅") {
+                    correct++;
+                }
+                if (currentMessage < embeds.length - 1) {
+                    reaction.message.reactions.resolve(reaction.emoji.name).users.remove(user);
+                    embedMessage.edit(embeds[++currentMessage]);
+                } else {
+                    collector.stop();
+                    reaction.message.reactions.removeAll();
+                    const resultsEmbed = new Discord.MessageEmbed()
+                    .setColor('#aaaaff')
+                    .setDescription(`  ${correct} ✅  ${incorrect} ❌ ${Math.round(100 * correct / (correct+incorrect))}% correct`)
+                    .setAuthor(`Results for the Case of ${targetMember.nickname}`, targetMember.user.avatarURL())
+                    .setFooter(`Judge ${msg.member.nickname}`, msg.author.avatarURL());
+
+                    embedMessage.edit(resultsEmbed)
+                }
+            } catch (error) {
+                console.error(error);
+                return message.channel.send(error.message).catch(console.error);
+            }
+        });
     }
 }
