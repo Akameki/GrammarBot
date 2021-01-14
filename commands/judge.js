@@ -14,7 +14,6 @@ module.exports = {
         let newMode = true;
         let limit = 10;
 
-        console.log(this.usage);
         const usage = this.usage;
         function sendProperUsage() { return channel.send(`Usage: ${msg.client.prefix}${usage}`).catch(console.error); }
 
@@ -25,13 +24,14 @@ module.exports = {
         if (args.length == 2) {
             if (args[1].toLowerCase === 'all' || args[1].toLowerCase === 'new') {
                 newMode = args[1].toLowerCase === 'new';
-            } else if (Number(args[1].isInteger)) {
+            } else if (Number.isInteger(Number(args[1]))) {
                 limit = parseInt(args[1]);
             } else {
+                console.log()
                 return sendProperUsage();
             }
         } else if (args.length > 2) {
-            if ((args[1].toLowerCase === 'all' || args[1].toLowerCase === 'new') && Number(args[2].isInteger)) {
+            if ((args[1].toLowerCase === 'all' || args[1].toLowerCase === 'new') && Number.isInteger(Number(args[2]))) {
                 newMode = args[1].toLowerCase === 'new';
                 limit = parseInt(args[2]);
             } else {
@@ -52,13 +52,13 @@ module.exports = {
         let messagesToJudge = [];
         let currLastId = 0; // id of last message for the current batch of messages
         let prevLastId = 0; // id of last message for the last batch of messages
-        let i = 0; // DEBUG
+        let fetchLoop = 0; // DEBUG
 
         console.log('  BEFORE LOOP.');
 
         // messages.fetch has a hard limit of 100, so it is looped until no more messages or the specified limit is exceeded.
         while (true) {
-            console.log("  inside loop!" + ++i); // DEBUG
+            console.log("  inside loop!" + ++fetchLoop); // DEBUG
             const options = { limit: 50 };
             if (currLastId) options.before = currLastId;
 
@@ -81,10 +81,14 @@ module.exports = {
             }
             prevLastId = currLastId;
         }
+
         console.log('  OUT OF LOOP.');
+
+        const actualNumOfMessages = Math.min(messagesToJudge.length, limit)
+
         let textToSend = `*Most recent ${limit} messages to judge for ${targetMember}:*\n`;
         if (messagesToJudge.length) {
-            for (let i = Math.min(messagesToJudge.length,  limit) - 1; i >= 0; i--) {
+            for (let i = actualNumOfMessages - 1; i >= 0; i--) {
                 message = messagesToJudge[i];
                 textToSend += `\`${i + 1}. ${message.createdAt.toDateString()}:\` ${message.cleanContent} \n`;
             }
@@ -94,17 +98,34 @@ module.exports = {
         }
 
         channel.stopTyping();
-        let index = 0;
-        const messageEmbed = new Discord.MessageEmbed()
-            .setColor('#006080')
-            .setDescription(messagesToJudge[index].cleanContent)
-            //.setTitle(`Judgement of `)
-            .setAuthor(`The Case of ${targetMember.nickname}`, targetMember.user.avatarURL())
-            .addField('Time created', messagesToJudge[index].createdAt.toDateString(), true)
-            .setFooter(`Judge ${msg.member.nickname}`, msg.author.avatarURL());
-        if (messagesToJudge[index].editedAt) messageEmbed.addField('Last edit', messagesToJudge[index].editedAt.toDateString(), true);
+        let embeds = [];
+        for (let i = 0; i < actualNumOfMessages; i++) {
+            let message = messagesToJudge[i];
+            const messageEmbed = new Discord.MessageEmbed()
+                .setColor('#006080')
+                .setDescription(message.cleanContent)
+                //.setTitle(`Judgement of `)
+                .setAuthor(`The Case of ${targetMember.nickname}`, targetMember.user.avatarURL())
+                .addField('Time created', message.createdAt.toDateString(), true)
+                .setFooter(`Judge ${msg.member.nickname}, exhibit ${i + 1} of ${actualNumOfMessages}`, msg.author.avatarURL());
+            if (message.editedAt) messageEmbed.addFields(
+                {
+                name: 'Last edit',
+                value: message.editedAt.toDateString(),
+                inline: true
+                },
+                { name: '\u200B', value: '\u200B', inline: true }
+            );
+            
+            embeds.push(messageEmbed);
+            
+        }
 
-        channel.send(messageEmbed);
+        let lastMessage;
+        for (let i = 0; i < actualNumOfMessages; i++) {
+            await channel.send(embeds[i]).then((msg) => lastMessage = msg).catch(console.error);
+            await lastMessage.delete({ timeout: 3500 }).catch(console.error);
+        }
         
     }
 }
