@@ -1,11 +1,11 @@
 const Discord = require('discord.js');
-const config = require('./config.json');
+const { prefix, token } = require('./config.json');
 const fs = require('fs');
 
 const client =  new Discord.Client();
-client.prefix = 'ur';
-
 client.commands = new Discord.Collection();
+client.prefix = prefix;
+
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
     const command = require(`./commands/${file}`);
@@ -13,23 +13,31 @@ for (const file of commandFiles) {
 }
 
 client.once('ready', () => {
-    console.log('bot online');
+    console.log('Beep boop! Bot is ready!');
 });
 
-client.on('message', msg => {
-    if (!msg.content.startsWith(client.prefix) || msg.author.bot) return;
+client.on('message', message => {
+    if (!message.content.startsWith(prefix) || message.author.bot) return;
 
-    const args = msg.content.slice(client.prefix.length).split(/ +/);
-    const command = args.shift().toLowerCase();
+    const args = message.content.slice(prefix.length).split(/ +/);
+    const commandName = args.shift().toLowerCase();
 
-    if (command === 'ping') {
-        client.commands.get('ping').execute(msg, args);
-    } else if (command === 'judge') {
-        client.commands.get('judge').execute(msg, args);
+    if (!client.commands.has(commandName)) return;
+    const command = client.commands.get(commandName);
 
+    if (command.args && !args.length) {
+        return message.channel.send(`Usage: ${prefix} ${command.usage}`);
     }
+
+    try {
+        command.execute(message, args);
+    } catch (error) {
+        console.error(error);
+        message.channel.send('something went wrong D:');
+    }
+
 });
 
 
 
-client.login(config.token);
+client.login(token);
