@@ -128,17 +128,33 @@ module.exports = {
                 .setDescription(msg.cleanContent)
                 .addField('Time created', msg.createdAt.toDateString(), true)
                 .setFooter(`Judge ${msg.member.nickname}, exhibit ${i + 1} of ${actualNumOfMessages}`, msg.author.avatarURL());
-            if (msg.editedAt) messageEmbed.addFields(
-                {
-                name: 'Last edit',
-                value: msg.editedAt.toDateString(),
-                inline: true
-                },
-                { name: '\u200B', value: '\u200B', inline: true }
-            );
+            if (msg.editedAt) {
+                messageEmbed.addField('Last edit', msg.editedAt.toDateString(), true);
+            } else { 
+                messageEmbed.addField('\u200B', '\u200B', true);
+            }
+            if (targetData[messagesToJudge[i].id]) {
+                let { verdict, judge } = targetData[messagesToJudge[i].id];
+                let color, emoji
+                let judgeMember = await message.guild.members.fetch(judge)
+                switch (verdict) {
+                    case "correct":
+                        [color, emoji] = ['#39db3e', '✅'];
+                        break;
+                    case "incorrect":
+                        [color, emoji] = ['#eb1a1a', '❌'];
+                        break;
+                    case "skipped":
+                        [color, emoji] = ['#fcff42', '⏭️'];
+                        break;
+                }
+                messageEmbed.setColor(color)
+                    .addField("Last judge", ` ${emoji} ${judgeMember.nickname}`, true);
+            } else {
+                messageEmbed.addField('\u200B', '\u200B', true);
+            }
             
             embeds.push(messageEmbed);
-            
         }
 
         /* send embed and detect reactions */
@@ -148,17 +164,19 @@ module.exports = {
             await embedMessage.react("❌");
             await embedMessage.react("✅");
             await embedMessage.react("⏭️");
+            await embedMessage.react("⏹️");
         } catch (error) {
             console.error(error);
             message.channel.send(error.message).catch(console.error);
         }
 
-        const filter = (reaction, user) => ["❌", "✅", "⏭️"].includes(reaction.emoji.name) && message.author.id === user.id;
+        const filter = (reaction, user) => ["❌", "✅", "⏭️", "⏹️"].includes(reaction.emoji.name) && message.author.id === user.id;
         const collector = embedMessage.createReactionCollector(filter, { time: 10 * 60 * 1000 }); // 10 minutes
         let page = 0;
         let currentMessageId;
         let incorrect = 0;
         let correct = 0;
+        let stopped = false;
 
         collector.on("collect", async (reaction, user)  => {
             try {
@@ -185,19 +203,20 @@ module.exports = {
                     targetMessageData.verdict = "correct";
                     targetData.correct++;
                     correct++;
-                } else {
+                } else if (reaction.emoji.name === "⏭️") {
                     targetMessageData.verdict = "skipped";
+                } else { // undo the remove :D
+                    if (targetMessageData.verdict === "incorrect") targetData.incorrect++;
+                    if (targetMessageData.verdict === "correct") targetData.correct++;
+                    stopped = true;
                 }
 
-                if (page < embeds.length - 1) {
+                if (!stopped && page < embeds.length - 1) {
                     reaction.message.reactions.resolve(reaction.emoji.name).users.remove(user);
                     embedMessage.edit(embeds[++page]);
                 } else {
                     // set oldestMessageId to the last message that was *checked* for search terms (rather than last filtered message)
-                    console.log(`${message.channel.messages.fetch(currLastId).createdAt} ${oldestMessage.createdAt}`)
-                    if (message.channel.messages.fetch(currLastId).createdAt < oldestMessage.createdAt) {
-                        targetData.oldestMessageId = currLastId;
-                    }
+                    if (!stopped && message.channel.messages.fetch(currLastId).createdAt < oldestMessage.createdAt) targetData.oldestMessageId = currLastId;
                     collector.stop();
                     reaction.message.reactions.removeAll();
                     const resultsEmbed = new Discord.MessageEmbed()
