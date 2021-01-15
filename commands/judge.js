@@ -7,63 +7,77 @@ module.exports = {
     usage: 'judge <user> [all/new] [limit]',
     // aliases: ['j'],
     description: 'judge a user\'s uses of "your" and "you\'re"',
-    async execute(msg, args) { // async??
-        const channel = msg.channel;
+    async execute(message, args) { // async??
+        const channel = message.channel;
 
         /* default args */
         let newMode = true;
         let limit = 10;
 
+        /* check and assign user args */
         const usage = this.usage;
-        function sendProperUsage() { return channel.send(`Usage: ${msg.client.prefix}${usage}`).catch(console.error); }
+        function sendProperUsage() { return message.channel.send(`Usage: ${message.client.prefix}${usage}`).catch(console.error); }
 
-        if (!msg.mentions.members.first()) return sendProperUsage();
+        if (!message.mentions.members.first()) return sendProperUsage();
 
-        const targetMember = msg.mentions.members.first();
+        const targetMember = message.mentions.members.first();
 
         if (args.length == 2) {
-            if (args[1].toLowerCase === 'all' || args[1].toLowerCase === 'new') {
-                newMode = args[1].toLowerCase === 'new';
+            if (args[1].toLowerCase() === 'all' || args[1].toLowerCase() === 'new') {
+                newMode = args[1].toLowerCase() === 'new';
             } else if (Number.isInteger(Number(args[1]))) {
                 limit = parseInt(args[1]);
             } else {
-                console.log()
                 return sendProperUsage();
             }
         } else if (args.length > 2) {
-            if ((args[1].toLowerCase === 'all' || args[1].toLowerCase === 'new') && Number.isInteger(Number(args[2]))) {
-                newMode = args[1].toLowerCase === 'new';
+            if ((args[1].toLowerCase() === 'all' || args[1].toLowerCase() === 'new') && Number.isInteger(Number(args[2]))) {
+                newMode = args[1].toLowerCase() === 'new';
                 limit = parseInt(args[2]);
             } else {
                 return sendProperUsage();
             }
         }
 
+        if (message.client.judging) return message.channel.send("please wait for the previous judgement to be completed or stopped");
+
         if (args[1] <= 0) {
-            return channel.send("invalid limit size you dunce").catch(console.error);
+            return message.channel.send("limit must be positive you dunce").catch(console.error);
         } else if (args[1] > 30) {
-            channel.send("limit lowered to 30").catch(console.error);
+            message.channel.send("limit lowered to 30").catch(console.error);
             limit = 30;
         }
 
-        channel.startTyping();
+        /* check data.json */
+        let channelId = message.channel.id;
+        if (!(channelId in message.client.data)) {
+            message.client.data[channelId] = {};
+        }
+        let targetId = targetMember.id;
+        if (!(targetId in message.client.data[channelId])) {
+            message.client.data[channelId][targetId] = { correct: 0, incorrect: 0 };
+        }
+        let targetData = message.client.data[channelId][targetId];
+
+        /* filter messages for search terms */
+        message.channel.startTyping();
+        message.client.judging = true;
 
         const searchTerms = ["your", "you're", "youre"];
         let messagesToJudge = [];
-        let currLastId = 0; // id of last message for the current batch of messages
+        let currLastId = newMode ? targetData.oldestMessageId ?? 0 : 0; // id of last message for the current batch of messages
         let prevLastId = 0; // id of last message for the last batch of messages
         let fetchLoop = 0; // DEBUG
 
-        console.log('  BEFORE LOOP.');
-
-        // messages.fetch has a hard limit of 100, so it is looped until no more messages or the specified limit is exceeded.
+        console.log('  BEFORE fetch loop.');
+        console.log(`currLastId=${currLastId}`);
+        // .fetch() has a hard limit of 100, so it is looped until no more messages or the specified limit is exceeded
         while (true) {
-            console.log("  inside loop!" + ++fetchLoop); // DEBUG
-            const options = { limit: 50 };
+            console.log(`  INSIDE fetch loop, iteration ${++fetchLoop}.`); // DEBUG
+            const options = { limit: 100 };
             if (currLastId) options.before = currLastId;
-
             try {
-                const messages = await channel.messages.fetch(options)
+                const messages = await message.channel.messages.fetch(options)
                 if (messages.last()) {
                     currLastId = messages.last().id;
                     messages.filter(m => m.author.id === targetMember.id && searchTerms.some(term => m.content.toLowerCase().includes(term)))
@@ -71,47 +85,53 @@ module.exports = {
                         .each(m => messagesToJudge.push(m));
                 }
             } catch(err) {
-                channel.send("there was an error :/");
+                message.channel.send("there was an error :/");
                 console.error(err);
                 break;
             }
             if (prevLastId === currLastId || messagesToJudge.length >= limit) {
-                console.log(`  prevID=${prevLastId} lastId=${currLastId} length=${messagesToJudge.length}`) // DEBUG
                 break;
             }
             prevLastId = currLastId;
         }
-
-        console.log('  OUT OF LOOP.');
+        console.log('  OUT of fetch loop.'); // DEBUG
 
         const actualNumOfMessages = Math.min(messagesToJudge.length, limit)
 
-        let textToSend = `*Most recent ${limit} messages to judge for ${targetMember}:*\n`;
-        if (messagesToJudge.length) {
-            for (let i = actualNumOfMessages - 1; i >= 0; i--) {
-                message = messagesToJudge[i];
-                textToSend += `\`${i + 1}. ${message.createdAt.toDateString()}:\` ${message.cleanContent} \n`;
-            }
-            channel.send(textToSend);
-        } else {
-            channel.send("No messages to judge.");
+        // let textToSend = `*Most recent ${limit} messages to judge for ${targetMember}:*\n`;
+        // if (messagesToJudge.length) {
+        //     for (let i = actualNumOfMessages - 1; i >= 0; i--) {
+        //         message = messagesToJudge[i];
+        //         textToSend += `\`${i + 1}. ${message.createdAt.toDateString()}:\` ${message.cleanContent} \n`;
+        //     }
+        //     message.channel.send(textToSend);
+        // } else {
+        //     message.channel.send("No messages to judge.");
+        // }
+
+        message.channel.stopTyping();
+
+        if (!actualNumOfMessages) {
+            targetData.oldestMessageId = currLastId;
+            message.client.judging = false;
+            return message.channel.send("No more messages!").catch(console.error);
         }
 
-        channel.stopTyping();
+        /* create embeds */
         let embeds = [];
         for (let i = 0; i < actualNumOfMessages; i++) {
-            let message = messagesToJudge[i];
+            let msg = messagesToJudge[i];
             const messageEmbed = new Discord.MessageEmbed()
-                .setColor('#006080')
-                .setDescription(message.cleanContent)
-                //.setTitle(`Judgement of `)
+                .setColor('#aaaaaa')
+                                //.setTitle()
                 .setAuthor(`The Case of ${targetMember.nickname}`, targetMember.user.avatarURL())
-                .addField('Time created', message.createdAt.toDateString(), true)
+                .setDescription(msg.cleanContent)
+                .addField('Time created', msg.createdAt.toDateString(), true)
                 .setFooter(`Judge ${msg.member.nickname}, exhibit ${i + 1} of ${actualNumOfMessages}`, msg.author.avatarURL());
-            if (message.editedAt) messageEmbed.addFields(
+            if (msg.editedAt) messageEmbed.addFields(
                 {
                 name: 'Last edit',
-                value: message.editedAt.toDateString(),
+                value: msg.editedAt.toDateString(),
                 inline: true
                 },
                 { name: '\u200B', value: '\u200B', inline: true }
@@ -121,11 +141,89 @@ module.exports = {
             
         }
 
-        let lastMessage;
-        for (let i = 0; i < actualNumOfMessages; i++) {
-            await channel.send(embeds[i]).then((msg) => lastMessage = msg).catch(console.error);
-            await lastMessage.delete({ timeout: 3500 }).catch(console.error);
-        }
+        /* send embed and detect reactions */
+        embedMessage = await message.channel.send(embeds[0]).catch(console.error);
         
+        try {
+            await embedMessage.react("❌");
+            await embedMessage.react("✅");
+            await embedMessage.react("⏭️");
+        } catch (error) {
+            console.error(error);
+            message.channel.send(error.message).catch(console.error);
+        }
+
+        const filter = (reaction, user) => ["❌", "✅", "⏭️"].includes(reaction.emoji.name) && message.author.id === user.id;
+        const collector = embedMessage.createReactionCollector(filter, { time: 10 * 60 * 1000 }); // 10 minutes
+        let page = 0;
+        let currentMessageId;
+        let incorrect = 0;
+        let correct = 0;
+
+        collector.on("collect", async (reaction, user)  => {
+            try {
+                currentMessageId = messagesToJudge[page].id; // the id of the message containing the search term, NOT the message with the embed
+                if (!(currentMessageId in targetData)) targetData[currentMessageId] = {};
+
+                targetMessageData = targetData[currentMessageId]
+
+                targetMessageData.judge = user.id;
+
+                oldestMessage = await message.channel.messages.fetch(targetData.oldestMessageId);
+                if (!('oldestMessageId' in targetData) || messagesToJudge[page].createdAt < oldestMessage.createdAt) { // if older than what's stored
+                    targetData.oldestMessageId = currentMessageId;
+                }
+                // remove previous verdict
+                if (targetMessageData.verdict === "incorrect") targetData.incorrect--;
+                if (targetMessageData.verdict === "correct") targetData.correct--;
+
+                if (reaction.emoji.name === "❌") {
+                    targetMessageData.verdict = "incorrect";
+                    targetData.incorrect++;
+                    incorrect++;
+                } else if (reaction.emoji.name === "✅") {
+                    targetMessageData.verdict = "correct";
+                    targetData.correct++;
+                    correct++;
+                } else {
+                    targetMessageData.verdict = "skipped";
+                }
+
+                if (page < embeds.length - 1) {
+                    reaction.message.reactions.resolve(reaction.emoji.name).users.remove(user);
+                    embedMessage.edit(embeds[++page]);
+                } else {
+                    // set oldestMessageId to the last message that was *checked* for search terms (rather than last filtered message)
+                    console.log(`${message.channel.messages.fetch(currLastId).createdAt} ${oldestMessage.createdAt}`)
+                    if (message.channel.messages.fetch(currLastId).createdAt < oldestMessage.createdAt) {
+                        targetData.oldestMessageId = currLastId;
+                    }
+                    collector.stop();
+                    reaction.message.reactions.removeAll();
+                    const resultsEmbed = new Discord.MessageEmbed()
+                    .setColor('#aaaaff')
+                    .setAuthor(`Results for the Case of ${targetMember.nickname}`, targetMember.user.avatarURL())
+                    //.setDescription(`  ${correct} ✅ ${incorrect} ❌ - ${Math.round(10*100*correct / (correct+incorrect))/10}%`)
+                    .addFields(
+                        {
+                            name: "This session",
+                            value: `${correct} ✅ ${incorrect} ❌ - ${Math.round(10*100*correct / (correct+incorrect))/10}%`,
+                            inline: true
+                        },
+                        {
+                            name: `Total in channel`,
+                            value: `${targetData.correct} ✅ ${targetData.incorrect} ❌ - ${Math.round(10*100*targetData.correct / (targetData.correct+targetData.incorrect))/10}%`,
+                            inline: true
+                        })
+                    .setFooter(`Judge ${message.member.nickname}`, message.author.avatarURL());
+                    embedMessage.edit(resultsEmbed)
+                    message.client.updateJSON();
+                    message.client.judging = false;
+                }
+            } catch (error) {
+                console.error(error);
+                return message.channel.send(error.message).catch(console.error);
+            }
+        });
     }
 }

@@ -12,6 +12,14 @@ for (const file of commandFiles) {
     client.commands.set(command.name, command);
 }
 
+if (!fs.existsSync('./data/data.json')) {
+    fs.writeFileSync('./data/data.json', JSON.stringify({}), err => {
+        if (err) throw err;
+        console.log('Created new data.json');
+    }); 
+}
+client.data = require('./data/data.json')
+
 client.once('ready', () => {
     console.log('Beep boop! Bot is ready!');
 });
@@ -38,6 +46,11 @@ client.on('message', message => {
 
 });
 
-
+client.updateJSON = function() {
+    fs.writeFileSync('./data/data.json', JSON.stringify(client.data, null, '\t'), err => {
+        if (err) throw err;
+        console.log('updated data.json');
+    }); 
+}
 
 client.login(token);
