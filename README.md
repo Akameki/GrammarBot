@@ -13,6 +13,8 @@ limit: max number of messages containing your/you're (NOT the number of all mess
 
 
 TODO:
+* add support for mulitple instances in a single message
+* highlight the your in the message
 * stop button in mid judgement
 * color code embed for previous verdicts
 * help command
