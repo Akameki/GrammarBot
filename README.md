@@ -1,4 +1,8 @@
 # GrammarBot
+
+Discord bot built using Discord.js
+
+For friends :)
  
 ### urjudge <user> [all/new] [limit]
  
@@ -13,16 +17,18 @@ limit: max number of messages containing your/you're (NOT the number of all mess
 
 
 TODO:
-* [x] add support for mulitple instances in a single message
+* [ ] add support for mulitple instances in a single message
 * [ ] highlight the your in the message
-* [ ] stop button in mid judgement
+* [x] stop button in mid judgement
 * [x] color code embed for previous verdicts
 * [ ] help command
 * [ ] view command
 * [ ] stats command
-* [ ] revamp readme
+* [ ] revamp README, make repo public?
+* [ ] make bot distributable with instructions
+    * [ ] manage token
 * [ ] separate JSON files into servers (or maybe channels as well?)
 * [ ] investigate JSON alternatives
 * [ ] command aliasing
-* [ ] change prefix
+* [ ] support chaning prefix
 * [ ] MAYBE add support for other search terms.. probably not for many reasons
