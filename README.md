@@ -29,6 +29,6 @@ TODO:
     * [ ] manage token
 * [ ] separate JSON files into servers (or maybe channels as well?)
 * [ ] investigate JSON alternatives
-* [ ] command aliasing
+* [x] command aliasing
 * [ ] support changing prefix
 * [ ] MAYBE add support for other search terms.. probably not for many reasons
