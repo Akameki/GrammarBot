@@ -64,39 +64,54 @@ module.exports = {
         message.client.judging = true;
 
         const searchTerms = ["your", "you're", "youre"];
-        let messagesToJudge = [];
-        let currLastId = newMode ? targetData.oldestMessageId ?? 0 : 0; // id of last message for the current batch of messages
-        let prevLastId = 0; // id of last message for the last batch of messages
-        let fetchLoop = 0; // DEBUG
+        let filteredMessages = [];
+        let lastMessageCheckedId; // id of last message for the current batch of messages
+        let jumpedToOldest = false; // used for new mode only
+        let oldestMessagePreFetches;
+        if (newMode) {
+            oldestMessagePreFetches = await message.channel.messages.fetch(targetData.oldestMessageId);
+        }
 
         console.log('  BEFORE fetch loop.');
-        console.log(`currLastId=${currLastId}`);
+        console.log(`lastMessageCheckedId=${lastMessageCheckedId}`);
+        let fetchLoop = 0; // DEBUG
         // .fetch() has a hard limit of 100, so it is looped until no more messages or the specified limit is exceeded
         while (true) {
             console.log(`  INSIDE fetch loop, iteration ${++fetchLoop}.`); // DEBUG
             const options = { limit: 100 };
-            if (currLastId) options.before = currLastId;
+            if (lastMessageCheckedId) options.before = lastMessageCheckedId;
+            let messages;
             try {
-                const messages = await message.channel.messages.fetch(options)
-                if (messages.last()) {
-                    currLastId = messages.last().id;
-                    messages.filter(m => m.author.id === targetMember.id && searchTerms.some(term => m.content.toLowerCase().includes(term)))
-                        // .filter(m => m.content.length < 500) // optional char limit
-                        .each(m => messagesToJudge.push(m));
-                }
+                messages = await message.channel.messages.fetch(options)
             } catch(err) {
-                message.channel.send("there was an error :/");
                 console.error(err);
+                message.client.judging = false;
+                return message.channel.send("there was an error :/").catch(console.error);
+            }
+            if (!messages.last()) break;
+
+            lastMessageCheckedId = messages.last().id;
+            let unfilteredLength = messages.length;
+            messages = messages.filter(m => m.author.id === targetMember.id && searchTerms.some(term => m.content.toLowerCase().includes(term)));
+                // .filter(m => m.content.length < 1500) // optional char limit
+            // in new mode, once reached a message that has been judged, next fetch loop will jump to fetching before oldestMessageId (if beneficial)
+            if (newMode && !jumpedToOldest && messages.some(m => m.id in targetData)) {
+                if (messages.last().createdAt > oldestMessagePreFetches.createdAt) {
+                    console.log('jumped to oldestMessageId!');
+                    lastMessageCheckedId = targetData.oldestMessageId;
+                }
+                messages = messages.filter(m => !(m.id in targetData));
+                jumpedToOldest = true;
+            }
+            messages.each(m => filteredMessages.push(m));
+
+            if (unfilteredLength < 100 || filteredMessages.length >= limit) {
                 break;
             }
-            if (prevLastId === currLastId || messagesToJudge.length >= limit) {
-                break;
-            }
-            prevLastId = currLastId;
         }
         console.log('  OUT of fetch loop.'); // DEBUG
 
-        const actualNumOfMessages = Math.min(messagesToJudge.length, limit)
+        const actualNumOfMessages = Math.min(filteredMessages.length, limit)
 
         // let textToSend = `*Most recent ${limit} messages to judge for ${targetMember}:*\n`;
         // if (messagesToJudge.length) {
@@ -112,7 +127,8 @@ module.exports = {
         message.channel.stopTyping();
 
         if (!actualNumOfMessages) {
-            targetData.oldestMessageId = currLastId;
+            targetData.oldestMessageId = lastMessageCheckedId;
+            message.client.updateJSON();
             message.client.judging = false;
             return message.channel.send("No more messages!").catch(console.error);
         }
@@ -120,8 +136,8 @@ module.exports = {
         /* create embeds */
         let embeds = [];
         for (let i = 0; i < actualNumOfMessages; i++) {
-            let msg = messagesToJudge[i];
-            const messageEmbed = new Discord.MessageEmbed()
+            let msg = filteredMessages[i];
+            const embed = new Discord.MessageEmbed()
                 .setColor('#aaaaaa')
                                 //.setTitle()
                 .setAuthor(`The Case of ${targetMember.nickname}`, targetMember.user.avatarURL())
@@ -129,12 +145,12 @@ module.exports = {
                 .addField('Time created', msg.createdAt.toDateString(), true)
                 .setFooter(`Judge ${msg.member.nickname}, exhibit ${i + 1} of ${actualNumOfMessages}`, msg.author.avatarURL());
             if (msg.editedAt) {
-                messageEmbed.addField('Last edit', msg.editedAt.toDateString(), true);
+                embed.addField('Last edit', msg.editedAt.toDateString(), true);
             } else { 
-                messageEmbed.addField('\u200B', '\u200B', true);
+                embed.addField('\u200B', '\u200B', true);
             }
-            if (targetData[messagesToJudge[i].id]) {
-                let { verdict, judge } = targetData[messagesToJudge[i].id];
+            if (targetData[filteredMessages[i].id]) {
+                let { verdict, judge } = targetData[filteredMessages[i].id];
                 let color, emoji
                 let judgeMember = await message.guild.members.fetch(judge)
                 switch (verdict) {
@@ -148,101 +164,119 @@ module.exports = {
                         [color, emoji] = ['#fcff42', '⏭️'];
                         break;
                 }
-                messageEmbed.setColor(color)
+                embed.setColor(color)
                     .addField("Last judge", ` ${emoji} ${judgeMember.nickname}`, true);
             } else {
-                messageEmbed.addField('\u200B', '\u200B', true);
+                embed.addField('\u200B', '\u200B', true);
             }
             
-            embeds.push(messageEmbed);
+            embeds.push(embed);
         }
 
         /* send embed and detect reactions */
         embedMessage = await message.channel.send(embeds[0]).catch(console.error);
         
         try {
-            await embedMessage.react("❌");
-            await embedMessage.react("✅");
-            await embedMessage.react("⏭️");
-            await embedMessage.react("⏹️");
+            await embedMessage.react('❌');
+            await embedMessage.react('✅');
+            await embedMessage.react('⏭️');
+            await embedMessage.react('⏹️');
         } catch (error) {
             console.error(error);
             message.channel.send(error.message).catch(console.error);
         }
 
-        const filter = (reaction, user) => ["❌", "✅", "⏭️", "⏹️"].includes(reaction.emoji.name) && message.author.id === user.id;
-        const collector = embedMessage.createReactionCollector(filter, { time: 10 * 60 * 1000 }); // 10 minutes
+        const filter = (reaction, user) => ['❌', '✅', '⏭️', '⏹️'].includes(reaction.emoji.name) && message.author.id === user.id;
+        const reactionCollector = embedMessage.createReactionCollector(filter, { idle: 2 * 60 * 1000 }); // 2 minutes
+
         let page = 0;
-        let currentMessageId;
         let incorrect = 0;
         let correct = 0;
-        let stopped = false;
+        targetData.oldestMessageId = targetData.oldestMessageId ?? filteredMessages[0].id;
+        let oldestMessage = await message.channel.messages.fetch(targetData.oldestMessageId)
 
-        collector.on("collect", async (reaction, user)  => {
+        reactionCollector.on("collect", async (reaction, user)  => {
             try {
-                currentMessageId = messagesToJudge[page].id; // the id of the message containing the search term, NOT the message with the embed
-                if (!(currentMessageId in targetData)) targetData[currentMessageId] = {};
+                if (reaction.emoji.name === '⏹️') return reactionCollector.stop("stop");
 
-                targetMessageData = targetData[currentMessageId]
+                currentMessage = filteredMessages[page]; // the id of the message containing the search term, NOT the message with the embed
+                targetData[currentMessage.id] = targetData[currentMessage.id] ?? {};
+
+                targetMessageData = targetData[currentMessage.id]
+
+                if (currentMessage.createdAt < oldestMessage.createdAt) { // will always be true after first time it's true
+                    targetData.oldestMessageId = currentMessage.id;
+                }
 
                 targetMessageData.judge = user.id;
 
-                oldestMessage = await message.channel.messages.fetch(targetData.oldestMessageId);
-                if (!('oldestMessageId' in targetData) || messagesToJudge[page].createdAt < oldestMessage.createdAt) { // if older than what's stored
-                    targetData.oldestMessageId = currentMessageId;
-                }
-                // remove previous verdict
                 if (targetMessageData.verdict === "incorrect") targetData.incorrect--;
                 if (targetMessageData.verdict === "correct") targetData.correct--;
-
-                if (reaction.emoji.name === "❌") {
-                    targetMessageData.verdict = "incorrect";
-                    targetData.incorrect++;
-                    incorrect++;
-                } else if (reaction.emoji.name === "✅") {
-                    targetMessageData.verdict = "correct";
-                    targetData.correct++;
-                    correct++;
-                } else if (reaction.emoji.name === "⏭️") {
-                    targetMessageData.verdict = "skipped";
-                } else { // undo the remove :D
-                    if (targetMessageData.verdict === "incorrect") targetData.incorrect++;
-                    if (targetMessageData.verdict === "correct") targetData.correct++;
-                    stopped = true;
+                switch (reaction.emoji.name) {
+                    case '❌': 
+                        targetMessageData.verdict = "incorrect";
+                        targetData.incorrect++;
+                        incorrect++;
+                        break;
+                    case '✅':
+                        targetMessageData.verdict = "correct";
+                        targetData.correct++;
+                        correct++;
+                        break;
+                    case '⏭️':
+                        targetMessageData.verdict = "skipped";
+                        break;
                 }
 
-                if (!stopped && page < embeds.length - 1) {
-                    reaction.message.reactions.resolve(reaction.emoji.name).users.remove(user);
+                if (page < embeds.length - 1) {
+                    embedMessage.reactions.resolve(reaction.emoji.name).users.remove(user);
                     embedMessage.edit(embeds[++page]);
                 } else {
+                    embedMessage.reactions.removeAll();
+                    reactionCollector.stop("complete");
                     // set oldestMessageId to the last message that was *checked* for search terms (rather than last filtered message)
-                    if (!stopped && message.channel.messages.fetch(currLastId).createdAt < oldestMessage.createdAt) targetData.oldestMessageId = currLastId;
-                    collector.stop();
-                    reaction.message.reactions.removeAll();
-                    const resultsEmbed = new Discord.MessageEmbed()
-                    .setColor('#aaaaff')
-                    .setAuthor(`Results for the Case of ${targetMember.nickname}`, targetMember.user.avatarURL())
-                    //.setDescription(`  ${correct} ✅ ${incorrect} ❌ - ${Math.round(10*100*correct / (correct+incorrect))/10}%`)
-                    .addFields(
-                        {
-                            name: "This session",
-                            value: `${correct} ✅ ${incorrect} ❌ - ${Math.round(10*100*correct / (correct+incorrect))/10}%`,
-                            inline: true
-                        },
-                        {
-                            name: `Total in channel`,
-                            value: `${targetData.correct} ✅ ${targetData.incorrect} ❌ - ${Math.round(10*100*targetData.correct / (targetData.correct+targetData.incorrect))/10}%`,
-                            inline: true
-                        })
-                    .setFooter(`Judge ${message.member.nickname}`, message.author.avatarURL());
-                    embedMessage.edit(resultsEmbed)
-                    message.client.updateJSON();
-                    message.client.judging = false;
+                    /* helpful if reached the beginning of the text channel:
+                     * on the next call, the bot will only check before the oldest message of the channel (nothing) rather than from the
+                     * last filtered message, which could potentially save a bit of time doing the same fetch()'s again.
+                     */
+                    lastMessageChecked = await message.channel.messages.fetch(lastMessageCheckedId);
+                    currentOldestMessage = await message.channel.messages.fetch(targetData.oldestMessageId);
+                    if (lastMessageChecked.createdAt < currentOldestMessage.createdAt) {
+                        targetData.oldestMessageId = lastMessageCheckedId;
+                    }
                 }
             } catch (error) {
                 console.error(error);
                 return message.channel.send(error.message).catch(console.error);
             }
         });
+        reactionCollector.on('end', (collected, reason) => {
+            console.log(`collector end: ${reason}`);
+            
+            embedMessage.reactions.removeAll();
+            const sessionPercentage = Math.round(10 * 100 * correct / (correct + incorrect)) / 10
+            const totalPercentage = Math.round(10 * 100 * targetData.correct / (targetData.correct + targetData.incorrect)) / 10
+            let heading, color;
+            switch (reason) {
+                case "complete":
+                    [heading, color] = ["Results for the Case of", '#ebfffd'];
+                    break;
+                case "stop":
+                    [heading, color] = ["[⏹️STOPPED] Case of", '#ffb5cc'];
+                    break;
+                case "idle":
+                    [heading, color] = ["[⌛EXPIRED] Case of", '#ffb5cc'];
+                    break;
+            }
+            const resultsEmbed = new Discord.MessageEmbed()
+                .setColor(color)
+                .setAuthor(`${heading} ${targetMember.nickname}`, targetMember.user.avatarURL())
+                .addField("This session", `${correct} ✅ ${incorrect} ❌ - ${sessionPercentage}%`, true)
+                .addField("Total in channel", `${targetData.correct} ✅ ${targetData.incorrect} ❌ - ${totalPercentage}%`, true)
+                .setFooter(`Judge ${message.member.nickname}`, message.author.avatarURL());
+            embedMessage.edit(resultsEmbed);
+            message.client.updateJSON();
+            message.client.judging = false;
+        })
     }
 }

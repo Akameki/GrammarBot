@@ -30,5 +30,5 @@ TODO:
 * [ ] separate JSON files into servers (or maybe channels as well?)
 * [ ] investigate JSON alternatives
 * [ ] command aliasing
-* [ ] support chaning prefix
+* [ ] support changing prefix
 * [ ] MAYBE add support for other search terms.. probably not for many reasons
