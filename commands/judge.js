@@ -3,9 +3,10 @@ const Discord = require("discord.js");
 
 module.exports = {
     name: "judge",
+    guildOnly: true,
     args: true,
     usage: 'judge <user> [all/new] [limit]',
-    // aliases: ['j'],
+    aliases: ['j'],
     description: 'judge a user\'s uses of "your" and "you\'re"',
     async execute(message, args) { // async??
         const channel = message.channel;
