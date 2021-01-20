@@ -38,7 +38,7 @@ client.on('message', message => {
         return message.channel.send("That's a server only command!")
     }
     if (command.args && !args.length) {
-        return message.channel.send(`Usage: ${prefix} ${command.usage}`);
+        return message.channel.send(`Usage: ${prefix}${command.usage}`);
     }
 
     try {
