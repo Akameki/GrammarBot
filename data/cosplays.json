@@ -1,0 +1,87 @@
+{
+  "dog f🐕cker ": {
+    "triggers": ["chase"],
+    "color": "#9db0a2"
+  },
+  "❌❌Obsessive boyfriend😬😬": {
+    "triggers": ["kayden"],
+    "color": "#F71735"
+  },
+  "steven LOL": {
+    "triggers": ["steve", "buff", "swole", "muscle", "protein"],
+    "color": "#53b7ff"
+  },
+  "Sleepy Joe": {
+    "triggers": ["biden", "potus", "president"],
+    "color": "4646FF"
+  },
+  "Cuckservative": {
+    "triggers": ["trump", "leftist", "lib"],
+    "color": "#FEB95F"
+  },
+  "🚲D🚲R🚲Y🚲E🚲R🚲": {
+    "triggers": ["bike", "dryer", "thackston", "carbon", "aero", "cycle"],
+    "color": "#cf4294"
+  },
+  "🐴 or smth idk im not a animalist": {
+    "triggers": ["donk"],
+    "color": "#bd943c"
+  },
+  "nerd🤓🤓🤓🤓🤓🤓🤓🤓🤓🤓🤓🤓🤓🤓🤓🤓😁😊☺🙂🤩": {
+    "triggers": ["cmsc"],
+    "color": "#FFFF3F"
+  },
+  "billionare bootlicker": {
+    "triggers": ["elon", "musk", "tesla", "bezos"],
+    "color": "#52B788"
+  },
+  "Dick Lover <3": {
+    "triggers": ["dick", "penis", "weiner", "schlong"],
+    "color": "#f72585"
+  },
+  "I Love Crowding My Bits": {
+    "triggers": ["crowderbits", "timcast"],
+    "color": "#b08968"
+  },
+  "Long Dick Tester": {
+    "triggers": ["testosterone", "testalone"],
+    "color": "#606c38"
+  },
+  "Owner of a Two Inch Punisher": {
+    "triggers": ["two", "inch"],
+    "color": "#6a040f"
+  },
+  "I Am Right": {
+    "triggers": ["amiright", "am i right"],
+    "color": "#fefae0"
+  },
+  "Literal White Supremacist": {
+    "triggers": ["white", "racism", "racist", "race traitor", "kkk", "proudboys"],
+    "color": "#edf2f4"
+  },
+  "????????????????????????????????": {
+    "triggers": ["????"],
+    "color": "#ff2222"
+  },
+  "pls feet picks": {
+    "triggers": ["aoc"],
+    "color": "#ccbc2f"
+  },
+  "😂": {
+    "triggers": ["joyer", "😂"],
+    "color": "#000000"
+  },
+  "RINO": {
+    "triggers": ["mcconnell"],
+    "color": "#ce2029"
+  },
+  "💪TERP💪": {
+    "triggers": ["terp", "umd"],
+    "color": "#E21836"
+  },
+  "annoying @everyone guy": {
+    "triggers": ["@everyone"],
+    "color": "#ff4444",
+    "time": 5
+  }
+}
